@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html><head>
+<script type="text/javascript"><!--
+
+/*
+
+	uNetBTRON https://github.com/paijp/unet-btron
+	
+	Copyright (c) 2023 paijp
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+*/
+
+var	elementlist = [];
+var	toollist = [];
+var	appl = null;
+var	svgdraw = null;
+var	svgtool = null;
+
+
+var	applprototype = {
+	url:	"http://pa-i.jp/a0/fged", 
+	load: function() {
+		var	req0 = new XMLHttpRequest();
+		req0.open("GET", document.URL + "&cmd=r", false);
+		req0.send();
+		elementlist = JSON.parse(req0.responseText);
+		for (var i=0; i<elementlist.length; i++) {
+			var	element = elementlist[i];
+			if (element["@"] == this.url) {
+				if (appl == null) {
+					appl = Object.create(applprototype);
+					Object.assign(appl, element);
+					elementlist[i] = appl;
+				}
+			}
+		}
+		if (appl == null) {
+			appl = Object.create(applprototype);
+			appl["@"] = this.url + "?_type=appl";
+			elementlist[elementlist.length] = appl;
+		}
+		appl.afterload();
+	}, 
+	afterload: function() {
+		for (var i=0; i<toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.init))
+				tool.init(this, elementlist);
+		}
+		this.updatedraw();
+		this.updatetool();
+	}, 
+	save: function() {
+		var	req0 = new XMLHttpRequest();
+		req0.open("POST", document.URL + "&cmd=w", false);
+		req0.setRequestHeader("Content-Type", "application/json");
+		req0.send(JSON.stringify(elementlist));
+	}, 
+	unselectall: function() {
+		for (var i=0; i<elementlist.length; i++)
+			elementlist[i]._S = 0;
+		this.updatedraw();
+	}, 
+	updatedraw: function() {
+		var	s = "";
+		for (var i=0; i<elementlist.length; i++) {
+			var	element = elementlist[i];
+			
+			if ((element._svg))
+				s += '<g transform="translate(' + element._X + ',' + element._Y + ')">' + element._svg + '</g>';
+		}
+		for (var i=0; i<elementlist.length; i++) {
+			var	element = elementlist[i];
+			
+			if ((element._S - 0)) {
+				var	l = element._X - 2;
+				var	t = element._Y - 2;
+				var	r = l + (element._w - 0) + 4;
+				var	b = t + (element._h - 0) + 4;
+				var	points = l + ' ' + t + ' ' + r + ' ' + t + ' ' + r + ' ' + b + ' ' + l + ' ' + b;
+				s += '<polygon points="' + points + '" stroke="#000000" fill="transparent" stroke-width="3" stroke-dasharray="4,8">';
+				s += '<animate attributeName="stroke-dashoffset" values="0;12" dur="0.5s" repeatCount="indefinite" />';
+				s += '</polygon>';
+				s += '<polygon points="' + points + '" stroke="#ffffff" fill="transparent" stroke-width="3" stroke-dasharray="4,8">';
+				s += '<animate attributeName="stroke-dashoffset" values="6;18" dur="0.5s" repeatCount="indefinite" />';
+				s += '</polygon>';
+			}
+		}
+		svgdraw.innerHTML = s;
+		svgdraw.onmousedown = function(e) {
+			appl.onmousedowndraw(e);
+		};
+		this.save();
+	}, 
+	updatetool: function() {
+		var	s = "";
+		var	x = 0;
+		var	y = 0;
+		
+		for (var i=0; i<toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.gettoolsvg)) {
+				var	obj = tool.gettoolsvg();
+				s += '<g transform="translate(' + x + ',' + y + ')">';
+				s += obj._svg;
+				if ((tool.isselected)&&(tool.isselected(this))) {
+					var	r = obj._w - 1;
+					var	b = obj._h - 1;
+					s += '<polygon points="1 1 ' + r + ' 1 ' + r + ' ' + b + ' 1 ' + b + '" stroke="#000000" fill="transparent" stroke-width="2" />';
+				}
+				s += '</g>';
+				x += obj._w;
+			}
+		}
+		svgtool.innerHTML = s;
+		svgtool.onmousedown = function(e) {
+			appl.onmousedowntool(e);
+		};
+		this.save();
+	}, 
+	onmousedowndraw: function(e) {
+		for (var i=0; i<toollist.length; i++) {
+			var	tool = toollist[i];
+			
+			if ((tool.onmousedowndraw)&&(tool.isselected)&&(tool.isselected(this))) {
+				tool.onmousedowndraw(this, elementlist, svgdraw, e);
+				return;
+			}
+		}
+	}, 
+	onmousedowntool: function(e) {
+		var	x = 0;
+		var	y = 0;
+		
+		for (var i=0; i<toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.gettoolsvg)) {
+				var	obj = tool.gettoolsvg();
+				
+				if (e.offsetX < x)
+					;
+				else if (e.offsetY < y)
+					;
+				else if (e.offsetX >= x + obj._w)
+					;
+				else if (e.offsetY >= y + obj._h)
+					;
+				else {
+					if ((tool.onmousedowntool))
+						tool.onmousedowntool(this, elementlist, svgtool, e);
+					return;
+				}
+				x += obj._w;
+			}
+		}
+	}, 
+	setcurrentattribute(element) {
+		for (var i=0; i<toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.setcurrentattribute))
+				tool.setcurrentattribute(this, element);
+		}
+	}
+};
+
+
+function	selecttool(selectchannel)
+{
+	var	toolurl = "";
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polygon points="2 4 14 4 14 12 2 12" stroke="#000000" fill="transparent" stroke-width="1" stroke-dasharray="2,2" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.isselected = function(appl) {
+		return (appl[selectchannel] == toolurl);
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		if (appl[selectchannel] == toolurl) {
+			for (var i=0; i<elementlist.length; i++) {
+				var	element = elementlist[i];
+				
+				if ((element._S - 0)) {
+					appl.unselectall();
+					return;
+				}
+			}
+			for (var i=0; i<elementlist.length; i++) {
+				var	element = elementlist[i];
+				if (!element._w)
+					continue;
+				if (!element._h)
+					continue;
+				element._S = 1;
+			}
+			appl.updatedraw();
+			return;
+		}
+		appl[selectchannel] = toolurl;
+		appl.updatetool();
+		appl.unselectall();
+	};
+	this.onmousedowndraw = function(appl, elementlist, svg, e) {
+		var	sx = e.offsetX;
+		var	sy = e.offsetY;
+		var	gx = e.pageX;
+		var	gy = e.pageY;
+		
+		appl.unselectall();
+		
+		svg.onmouseup = function(e) {
+			var	ex = e.pageX - gx + sx;
+			var	ey = e.pageY - gy + sy;
+			var	l = Math.min(sx, ex);
+			var	t = Math.min(sy, ey);
+			var	r = Math.max(sx, ex);
+			var	b = Math.max(sy, ey);
+			var	selectexists = 0;
+			
+			svg.onmouseup = null;
+			
+			for (var i=0; i<elementlist.length; i++) {
+				var	element = elementlist[i];
+				
+				if (!element._w)
+					continue;
+				if (!element._h)
+					continue;
+				
+				element._S = 0;
+				if (element._X - 0 < l)
+					continue;
+				if (element._Y - 0 < t)
+					continue;
+				if (element._X - 0 + (element._w - 0) >= r)
+					continue;
+				if (element._Y - 0 + (element._h - 0) >= b)
+					continue;
+				element._S = 1;
+				selectexists = 1;
+			}
+			if ((selectexists)) {
+				appl.updatedraw();
+				return;
+			}
+			for (var i=elementlist.length - 1; i>=0; i--) {
+				var	element = elementlist[i];
+				
+				if (!element._w)
+					continue;
+				if (!element._h)
+					continue;
+				
+				if (l < element._X - 0)
+					continue;
+				if (t < element._Y - 0)
+					continue;
+				if (r >= element._X - 0 + (element._w - 0))
+					continue;
+				if (b >= element._Y - 0 + (element._h - 0))
+					continue;
+//				element._S = 1;
+//				appl.updatedraw();
+				if ((element.onclick)) {
+					element.onclick();
+					return;
+				}
+			}
+			appl.updatedraw();
+		};
+	};
+}
+
+
+function	polylinetool(selectchannel)
+{
+	var	toolurl = "http://pa-i.jp/e0/polyline";
+	
+	var	elementprototype = {
+		updatesvg: function() {
+			this._svg = '<polyline points="' + this.path + '" stroke="#' + this.cf + '" fill="transparent" stroke-width="' + this.lt + '" />';
+			var	a = this.path.split(" ");
+			var	i = 0;
+			var	l, t, r, b;
+			l = r = a[i++];
+			t = b = a[i++];
+			while (i < a.length) {
+				l = Math.min(l, a[i]);
+				r = Math.max(r, a[i++]);
+				t = Math.min(t, a[i]);
+				b = Math.max(b, a[i++]);
+			}
+			this._w = r - l;
+			this._h = b - t;
+		}, 
+		set_cf: function(cf) {
+			this.cf = cf;
+			this.updatesvg();
+		}, 
+		set_lt: function(lt) {
+			this.lt = lt;
+			this.updatesvg();
+		}
+	};
+	this.init = function(appl, elementlist) {
+		for (var i=0; i<elementlist.length; i++) {
+			var	element = elementlist[i];
+			
+			if (element["@"] == toolurl) {
+				var	newelement = Object.create(elementprototype);
+				Object.assign(newelement, element);
+				newelement.updatesvg();
+				elementlist[i] = newelement;
+			}
+		}
+	};
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polyline points="2 12 14 4" stroke="#000000" fill="transparent" stroke-width="1" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.isselected = function(appl) {
+		return (appl[selectchannel] == toolurl);
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		appl[selectchannel] = toolurl;
+		appl.updatetool();
+	};
+	this.onmousedowndraw = function(appl, elementlist, svg, e) {
+		var	sx = e.offsetX;
+		var	sy = e.offsetY;
+		var	gx = e.pageX;
+		var	gy = e.pageY;
+		
+		appl.unselectall();
+		
+		svg.onmouseup = function(e) {
+			var	ex = e.pageX - gx + sx;
+			var	ey = e.pageY - gy + sy;
+			var	l = Math.min(sx, ex);
+			var	t = Math.min(sy, ey);
+			
+			svg.onmouseup = null;
+			
+			var	element = Object.create(elementprototype);
+			element["@"] = toolurl;
+			element._S = 1;
+			element._X = l;
+			element._Y = t;
+			element.cf = "000000";
+			element.path = (sx - l) + " " + (sy - t) + " " + (ex - l) + " " + (ey - t);
+			element.lt = "3";
+			appl.setcurrentattribute(element);
+			element.updatesvg();
+			elementlist[elementlist.length] = element;
+			appl.updatedraw();
+		};
+	};
+}
+
+
+function	deletetool(selectchannel)
+{
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polygon points="13 3 3 13" stroke="#000000" fill="transparent" stroke-width="2" />';
+		s += '<polygon points="3 8 13 8" stroke="#000000" fill="transparent" stroke-width="4" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		var	i = 0;
+		while (i < elementlist.length) {
+			var	element = elementlist[i];
+			if ((element._S - 0)) {
+				elementlist.splice(i, 1);
+				continue;
+			}
+			i++;
+		}
+		appl.updatedraw();
+	};
+}
+
+
+function	cftool(selectchannel, color)
+{
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polygon points="10 2 14 2 14 6 6 14 2 14 2 10" stroke="#000000" fill="#' + color + '" stroke-width="1" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.isselected = function(appl) {
+		return (appl[selectchannel] == color);
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		appl[selectchannel] = color;
+		for (var i=0; i<elementlist.length; i++) {
+			var	element = elementlist[i];
+			
+			if ((element._S - 0)&&(element.set_cf))
+				element.set_cf(color);
+		}
+		appl.updatedraw();
+		appl.updatetool();
+	};
+	this.setcurrentattribute = function(appl, element) {
+		if ((appl[selectchannel] == color)&&(element.set_cf))
+			element.set_cf(color);
+	};
+}
+
+
+function	linktool()
+{
+	var	toolurl = "http://pa-i.jp/e0/link";
+	
+	var	elementprototype = {
+		updatesvg: function() {
+			var	w = this._w = 128;
+			var	h = this._h = 16;
+			this._svg = '<polygon points="0 0 0 ' + h + ' ' + w + ' ' + h + ' ' + w + ' 0" stroke="#' + this.cf + '" fill="transparent" stroke-width="1" />';
+			this._svg += '<text x="0" y="' + (h - 2) + '" font-size="12">' + this.datapath.split("/")[1] + '</text>';
+		}, 
+		set_cf: function(cf) {
+			this.cf = cf;
+			this.updatesvg();
+		}, 
+		onclick: function() {
+			window.open("?data=" + this.datapath + "&appl=" + this.applpath, this.datapath + ":" + this.applpath);
+		}
+	};
+	this.init = function(appl, elementlist) {
+		for (var i=0; i<elementlist.length; i++) {
+			var	element = elementlist[i];
+			
+			if (element["@"] == toolurl) {
+				var	newelement = Object.create(elementprototype);
+				Object.assign(newelement, element);
+				newelement.updatesvg();
+				elementlist[i] = newelement;
+			}
+		}
+	};
+}
+
+
+toollist = [
+	new selecttool("draw"), 
+	new polylinetool("draw"), 
+	new deletetool(), 
+	new cftool("cf", "000000"), 
+	new cftool("cf", "0000ff"), 
+	new cftool("cf", "00ff00"), 
+	new cftool("cf", "ff0000"), 
+	new linktool()
+];
+
+
+function	onload()
+{
+	svgdraw = document.getElementById("svgdraw");
+	svgtool = document.getElementById("svgtool");
+	
+	applprototype.load();
+}
+
+
+//--></script>
+</head><body onload="onload();">
+<svg id="svgtool" version="1.1" baseProfile="full" width="4000" height="32"></svg>
+<svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="4000"></svg>
+</body></html>
